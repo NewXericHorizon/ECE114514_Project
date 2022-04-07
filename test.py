@@ -7,9 +7,9 @@ from model.VAE import *
 from pgd_attack import *
 import torch.optim as optim
 import argparse
-
-# import os
-# os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+import numpy as np
+import os
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 VAE Training')
 parser.add_argument('--batch-size', type=int, default=400, metavar='N',
@@ -40,7 +40,7 @@ batch_size = 100
 test_batch_size = 200
 x_dim = 784
 latent_dim = 200
-epochs = 40
+epochs = 20
 trainset = torchvision.datasets.MNIST(root='../data', train=True, download=True, transform=transform_test)
 train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, **kwargs)
 testset = torchvision.datasets.MNIST(root='../data', train=False, download=True, transform=transform_test)
@@ -57,7 +57,15 @@ def loss_function(x, label, x_hat, mean, log_var, logit):
     return loss
 
 def vae_loss(x, x_hat, mean, log_var):
-    reproduction_loss = nn.functional.binary_cross_entropy(x_hat, x, reduction='sum')
+    #x_hat[x_hat != x_hat] = 0
+    if((x_hat != x_hat).sum().item() > 0):
+      print((x_hat != x_hat).sum().item())
+      temp = np.array(x_hat.squeeze().detach().cpu())
+      temp = temp.reshape((200, 28*28))
+      np.savetxt('test.txt',temp)
+      
+      exit()
+    reproduction_loss = nn.BCELoss(reduction='sum')(x_hat, x)
     KLD      = - 0.5 * torch.sum(1+ log_var - mean.pow(2) - log_var.exp())
     vae_loss = reproduction_loss + KLD
     return vae_loss
@@ -92,6 +100,11 @@ def testtime_update(vae_model, x_adv, learning_rate=0.5, num = 10):
     x_hat_adv, mean, log_v, x_ = vae_model(x_adv)
     x_adv = x_adv.detach()
     for _ in range(num):
+        if ((x_hat_adv != x_hat_adv).sum() > 0):
+            print((x_hat_adv != x_hat_adv).sum())
+            print(mean)
+            print(log_v)
+            exit()
         loss = vae_loss(x_adv, x_hat_adv, mean, log_v)
         mean.retain_grad()
         log_v.retain_grad()
