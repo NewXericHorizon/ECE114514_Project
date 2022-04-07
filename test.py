@@ -40,7 +40,7 @@ batch_size = 100
 test_batch_size = 200
 x_dim = 784
 latent_dim = 200
-epochs = 20
+epochs = 40
 trainset = torchvision.datasets.MNIST(root='../data', train=True, download=True, transform=transform_test)
 train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, **kwargs)
 testset = torchvision.datasets.MNIST(root='../data', train=False, download=True, transform=transform_test)
@@ -52,7 +52,7 @@ def loss_function(x, label, x_hat, mean, log_var, logit):
     KLD      = - 0.5 * torch.sum(1+ log_var - mean.pow(2) - log_var.exp())
     vae_loss = reproduction_loss + KLD
     c_loss = nn.CrossEntropyLoss()(logit, label)
-    beta = 0.5
+    beta = 0.4
     loss = vae_loss * beta + c_loss * (1 - beta) 
     return loss
 
@@ -96,7 +96,7 @@ def model_pred(x, vae_model, c_model):
     logit = c_model(x_cat)
     return logit, mean, log_v
 
-def testtime_update(vae_model, x_adv, learning_rate=0.5, num = 10):
+def testtime_update(vae_model, x_adv, learning_rate=0.1, num = 40):
     x_hat_adv, mean, log_v, x_ = vae_model(x_adv)
     x_adv = x_adv.detach()
     for _ in range(num):
