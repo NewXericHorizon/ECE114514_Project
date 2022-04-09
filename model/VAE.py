@@ -48,7 +48,7 @@ class VAE(nn.Module):
         x = x.view(-1, 64*7*7)
         mu = self.encFC1(x)
         logVar = self.encFC2(x)
-        return mu, logVar, x
+        return mu, logVar
 
     def reparameterize(self, mu, logVar):
         #Reparameterization takes in the input mu and logVar and sample the mu + std * eps
@@ -70,36 +70,11 @@ class VAE(nn.Module):
     def forward(self, x):
         # The entire pipeline of the VAE: encoder -> reparameterization -> decoder
         # output, mu, and logVar are returned for loss computation
-        mu, logVar, x_ = self.encoder(x)
+        mu, logVar = self.encoder(x)
         z = self.reparameterize(mu, logVar)
         out = self.decoder(z)
-        return out, mu, logVar, x_
+        return out, mu, logVar
 
-class BasicBlock(nn.Module):
-    def __init__(self, inplanes, planes, norm_layer, stride=1, downsample=None):
-        super(BasicBlock, self).__init__()
-        self.downsample = downsample
-        self.stride = stride
-        self.bn1 = norm_layer(inplanes)
-        self.relu1 = nn.ReLU(inplace=True)
-        self.conv1 = nn.Conv1d(inplanes, planes, kernel_size=3, stride = stride)
-
-        self.bn2 = norm_layer(planes)
-        self.relu2 = nn.ReLU(inplace=True)
-        self.conv2 = nn.Conv1d(planes, planes, kernel_size=3)
-
-    def forward(self, x):
-        residual = x 
-        residual = self.bn1(residual)
-        residual = self.relu1(residual)
-        residual = self.conv1(residual)
-
-        residual = self.bn2(residual)
-        residual = self.relu2(residual)
-        residual = self.conv2(residual)
-        if self.downsample is not None:
-            x = self.downsample(x)
-        return x + residual
 
 class classifier(nn.Module):
     def __init__(self, input_dim = 64*7*7+256*2, feature_dim = 10, depth = 2):
@@ -110,7 +85,6 @@ class classifier(nn.Module):
         # self.encConv3 = nn.Conv2d(32, 64, 3, padding=1)
         # self.encConv4 = nn.Conv2d(64, 64, 3, padding=1)
         # self.max2 = nn.MaxPool2d(2,2)
-
 
         self.FC1 = nn.Linear(input_dim, 512)
         self.drop = nn.Dropout(0.5)
@@ -135,9 +109,6 @@ class classifier(nn.Module):
         # x = F.relu(self.encConv4(x))
         # x = self.max2(x)
 
-
-
-        #x = x.view(-1, 64*7*7)
         x = F.relu(self.FC1(x))
         x = self.drop(x)
         x = F.relu(self.FC2(x))
