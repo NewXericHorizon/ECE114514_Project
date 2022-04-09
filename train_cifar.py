@@ -53,6 +53,7 @@ def train(vae_model, c_model, data_loader, vae_optimizer, c_optimizer, epoch_num
         logit = c_model(x_cat.detach())
         #logit = c_model(x_cat)
         loss = loss_function(data, target, x_hat, mean, log_v, logit, args.beta)
+        print(loss)
         loss_sum += loss
         loss.backward()
         # if epoch_num % 2 == 1:

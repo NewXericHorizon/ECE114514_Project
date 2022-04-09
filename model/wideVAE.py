@@ -37,6 +37,7 @@ class wide_VAE(nn.Module):
         self.enc_block1 = self._make_layer_encoder(3, in_planes=16, out_planes=64, stride=1)
         self.enc_block2 = self._make_layer_encoder(3, in_planes=64, out_planes=160, stride=2)
         self.enc_block3 = self._make_layer_encoder(3, in_planes=160, out_planes=320, stride=2)
+        self.norm = nn.BatchNorm2d(320)
         self.encFC1 = nn.Linear(featureDim, zDim)
         self.encFC2 = nn.Linear(featureDim, zDim)
 
@@ -65,16 +66,17 @@ class wide_VAE(nn.Module):
         layers = []
         for i in range(depth):
             if i == 0 and stride != 1:
-                layers.append(nn.BatchNorm2d(in_planes))
-                layers.append(nn.ReLU(inplace=True))
                 layers.append(nn.ConvTranspose2d(in_planes, out_planes, kernel_size=3, stride=stride, padding=1, output_padding=1, bias=False))
-            else:
-                layers.append(nn.BatchNorm2d(i == 0 and in_planes or out_planes))
+                layers.append(nn.BatchNorm2d(out_planes))
                 layers.append(nn.ReLU(inplace=True))
+            else:
                 layers.append(nn.Conv2d(i == 0 and in_planes or out_planes, out_planes, kernel_size=3, stride=1, padding=1, bias=False))
+                layers.append(nn.BatchNorm2d(out_planes))
+                layers.append(nn.ReLU(inplace=True))
+
+            layers.append(nn.Conv2d(out_planes, out_planes, kernel_size=3, stride=1, padding=1, bias=False))
             layers.append(nn.BatchNorm2d(out_planes))
             layers.append(nn.ReLU(inplace=True))
-            layers.append(nn.Conv2d(out_planes, out_planes, kernel_size=3, stride=1, padding=1, bias=False))
         return nn.Sequential(*layers)
 
     def encoder(self, x):
@@ -82,6 +84,7 @@ class wide_VAE(nn.Module):
         x = self.enc_block1(x)
         x = self.enc_block2(x)
         x = self.enc_block3(x)
+        x = F.relu(self.norm(x))
         x = x.view(-1, 320*8*8)
         mu = self.encFC1(x)
         logVar = self.encFC2(x)
@@ -94,7 +97,7 @@ class wide_VAE(nn.Module):
         return mu + std * eps
 
     def decoder(self, z):
-        z = self.decFC1(z)
+        z = F.relu(self.decFC1(z))
         z = z.view(-1, 320, 8, 8)
         z = self.dec_block1(z)
         z = self.dec_block2(z)
