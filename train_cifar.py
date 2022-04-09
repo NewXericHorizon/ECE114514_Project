@@ -15,7 +15,7 @@ parser.add_argument('--batch-size', type=int, default=64, metavar='N',
                     help='input batch size for training (default: 128)')
 parser.add_argument('--test-batch-size', type=int, default=64, metavar='N',
                     help='input batch size for testing (default: 128)')
-parser.add_argument('--latent-dim', type=int, default=4096)
+parser.add_argument('--latent-dim', type=int, default=1024)
 parser.add_argument('--epochs', type=int, default=70)
 parser.add_argument('--testtime-epochs', type=int, default=20)
 parser.add_argument('--testtime-lr',  default=0.1)
