@@ -8,8 +8,7 @@ from pgd_attack import *
 import torch.optim as optim
 import argparse
 import numpy as np
-import os
-os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+from util import *
 
 parser = argparse.ArgumentParser(description='PyTorch MNIST VAE Training')
 parser.add_argument('--batch-size', type=int, default=400, metavar='N',
@@ -23,6 +22,7 @@ parser.add_argument('--epochs', type=int, default=50)
 parser.add_argument('--testtime-epochs', type=int, default=20)
 parser.add_argument('--testtime-lr',  default=0.1)
 parser.add_argument('--lr', default=0.001)
+parser.add_argument('--beta', default=0.5)
 args = parser.parse_args()
 
 torch.manual_seed(1)
@@ -44,20 +44,6 @@ train_loader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size,
 testset = torchvision.datasets.MNIST(root='../data', train=False, download=True, transform=transform_test)
 test_loader = torch.utils.data.DataLoader(testset, batch_size=args.test_batch_size, shuffle=False, **kwargs)
 
-
-def loss_function(x, label, x_hat, mean, log_var, logit):
-    v_loss = vae_loss(x, x_hat, mean, log_var)
-    c_loss = nn.CrossEntropyLoss()(logit, label)
-    beta = 0.5
-    loss = v_loss * beta + c_loss * (1 - beta) 
-    return loss
-
-def vae_loss(x, x_hat, mean, log_var):
-    reproduction_loss = nn.functional.binary_cross_entropy(x_hat, x, reduction='sum')
-    KLD      = - 0.5 * torch.sum(1+ log_var - mean.pow(2) - log_var.exp())
-    v_loss = reproduction_loss + KLD
-    return v_loss
-
 def train(vae_model, c_model, data_loader, vae_optimizer, c_optimizer, epoch_num):
     vae_model.train()
     c_model.train()
@@ -71,38 +57,13 @@ def train(vae_model, c_model, data_loader, vae_optimizer, c_optimizer, epoch_num
         x_cat = torch.cat((mean, log_v),1)
         logit = c_model(x_cat.detach())
         #logit = c_model(x_cat)
-        loss = loss_function(data, target, x_hat, mean, log_v, logit)
+        loss = loss_function(data, target, x_hat, mean, log_v, logit, args.beta)
         loss_sum += loss
         loss.backward()
         # if epoch_num % 2 == 1:
         c_optimizer.step()
         vae_optimizer.step()
     return loss_sum
-
-def model_pred(x, vae_model, c_model):
-    x_hat, mean, log_v = vae_model(x)
-    x_cat = torch.cat((mean, log_v), 1)
-    logit = c_model(x_cat)
-    return logit, mean, log_v
-
-def testtime_update(vae_model, x_adv, learning_rate=0.1, num = 30):
-    x_hat_adv, mean, log_v = vae_model(x_adv)
-    x_adv = x_adv.detach()
-    for _ in range(num):
-        if (x_hat_adv != x_hat_adv).sum() > 0:
-            print('nan Error')
-            exit()
-        loss = vae_loss(x_adv, x_hat_adv, mean, log_v)
-        mean.retain_grad()
-        log_v.retain_grad()
-        loss.backward(retain_graph=True)
-        with torch.no_grad():
-            mean.data -= learning_rate * mean.grad.data
-            log_v.data -= learning_rate * log_v.grad.data
-        mean.grad.data.zero_()
-        log_v.grad.data.zero_()
-        x_hat_adv = vae_model.decoder(vae_model.reparameterize(mean, log_v))
-    return mean, log_v
 
 def test(vae_model, c_model):
     err_num = 0
@@ -135,7 +96,6 @@ def adjust_learning_rate(vae_optimizer,c_optimizer, epoch):
         param_group['lr'] = lr
     for param_group in vae_optimizer.param_groups:
         param_group['lr'] = lr
-
 
 def main():
     vae_model = VAE(zDim=args.latent_dim).to(device)

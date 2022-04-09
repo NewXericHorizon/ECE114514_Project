@@ -77,7 +77,7 @@ class VAE(nn.Module):
 
 
 class classifier(nn.Module):
-    def __init__(self, input_dim = 64*7*7+256*2, feature_dim = 10, depth = 2):
+    def __init__(self, input_dim = 256*2, feature_dim = 10):
         super(classifier, self).__init__()
         # self.encConv1 = nn.Conv2d(1, 32, 3, padding=1)
         # self.encConv2 = nn.Conv2d(32, 32, 3, padding=1)
