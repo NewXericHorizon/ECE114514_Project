@@ -11,7 +11,7 @@ import numpy as np
 import os
 os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 
-parser = argparse.ArgumentParser(description='PyTorch CIFAR10 VAE Training')
+parser = argparse.ArgumentParser(description='PyTorch MNIST VAE Training')
 parser.add_argument('--batch-size', type=int, default=400, metavar='N',
                     help='input batch size for training (default: 128)')
 parser.add_argument('--test-batch-size', type=int, default=400, metavar='N',
