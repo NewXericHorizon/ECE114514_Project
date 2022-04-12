@@ -1,11 +1,11 @@
 import torch
 import torch.nn as nn
-
+import torch.nn.functional as F
 def loss_function(x, label, x_hat, mean, log_var, logit, beta = 0.5):
     v_loss = vae_loss(x, x_hat, mean, log_var)
-    c_loss = nn.CrossEntropyLoss()(logit, label)
-    loss = v_loss * beta + c_loss * (1 - beta) 
-    return loss
+    c_loss = F.cross_entropy(logit, label, size_average=False)
+    loss = v_loss * beta + c_loss * (1 - beta)
+    return v_loss, c_loss
 
 def vae_loss(x, x_hat, mean, log_var):
     reproduction_loss = nn.functional.binary_cross_entropy(x_hat, x, size_average=False, reduction='mean')
@@ -14,10 +14,10 @@ def vae_loss(x, x_hat, mean, log_var):
     return v_loss
 
 def model_pred(x, vae_model, c_model):
-    x_hat, mean, log_v = vae_model(x)
+    x_hat, mean, log_v, x_ = vae_model(x)
     x_cat = torch.cat((mean, log_v), 1)
-    logit = c_model(x_cat)
-    return logit, mean, log_v
+    logit = c_model(x_)
+    return logit
 
 def testtime_update(vae_model, x_adv, learning_rate=0.1, num = 30):
     x_hat_adv, mean, log_v = vae_model(x_adv)
