@@ -30,20 +30,20 @@ class BasicBlock(nn.Module):
         return torch.add(x if self.equalInOut else self.convShortcut(x), out)
 
 
-class wide_VAE(nn.Module):
-    def __init__(self, featureDim = 160*8*8, zDim = 512, dropRate = 0.0):
-        super(wide_VAE, self).__init__()
+class VAE(nn.Module):
+    def __init__(self, featureDim = 120*7*7, zDim = 256, dropRate = 0.0):
+        super(VAE, self).__init__()
         self.featureDim = featureDim
         self.in_layer = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1, bias=False)
-        self.enc_block1 = self._make_layer_encoder(2, in_planes=16, out_planes=80, stride=2)
-        self.enc_block2 = self._make_layer_encoder(2, in_planes=80, out_planes=160, stride=2)
-        self.norm = nn.BatchNorm2d(160)
+        self.enc_block1 = self._make_layer_encoder(2, in_planes=16, out_planes=60, stride=2)
+        self.enc_block2 = self._make_layer_encoder(2, in_planes=60, out_planes=120, stride=2)
+        self.norm = nn.BatchNorm2d(120)
         self.encFC1 = nn.Linear(featureDim, zDim)
         self.encFC2 = nn.Linear(featureDim, zDim)
 
         self.decFC1 = nn.Linear(zDim, featureDim)
-        self.dec_block1 = self._make_layer_decoder(2, in_planes=160, out_planes=80 ,stride=2)
-        self.dec_block2 = self._make_layer_decoder(2, in_planes=80, out_planes=16, stride=2)
+        self.dec_block1 = self._make_layer_decoder(2, in_planes=120, out_planes=60 ,stride=2)
+        self.dec_block2 = self._make_layer_decoder(2, in_planes=60, out_planes=16, stride=2)
         self.out_layer = nn.Conv2d(16, 3, kernel_size=3, stride=1, padding=1, bias=False)
 
         for m in self.modules():
@@ -117,12 +117,12 @@ class wide_VAE(nn.Module):
         return out
 
 class classifier(nn.Module):
-    def __init__(self, input_dim = 160, feature_dim=10):
+    def __init__(self, input_dim = 120, feature_dim=10):
         super(classifier, self).__init__()
-        self.out_dim = input_dim*4
+        self.out_dim = input_dim*2
         self.in_layer = nn.Conv2d(input_dim, input_dim, kernel_size=3, stride=1, padding=1, bias=False)
-        self.block1 = self._make_layer(3, input_dim, int(input_dim*2), 1)
-        self.block2 = self._make_layer(3, int(input_dim*2), self.out_dim, 2)
+        self.block1 = self._make_layer(3, input_dim, int(input_dim*2), 2)
+        # self.block2 = self._make_layer(3, int(input_dim*2), self.out_dim, 2)
         self.bn = nn.BatchNorm2d(self.out_dim)
         self.relu = nn.ReLU(inplace=True)
         self.FC = nn.Linear(self.out_dim, 10)
@@ -145,37 +145,9 @@ class classifier(nn.Module):
     def forward(self, x):
         x = self.in_layer(x)
         x = self.block1(x)
-        x = self.block2(x)
+        # x = self.block2(x)
         x = self.relu(self.bn(x))
         x = F.avg_pool2d(x, 4)
         x = x.view(-1, self.out_dim)
         x = self.FC(x)
         return x
-
-
-class test_model(nn.Module):
-    def __init__(self):
-        super(test_model, self).__init__()
-        self.in_layer = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1, bias=False)
-        self.block1 = self._make_layer_encoder(3, in_planes=16, out_planes=64, stride=1)
-        self.block2 = self._make_layer_encoder(3, in_planes=64, out_planes=160, stride=2)
-        self.block3 = self._make_layer_encoder(3, in_planes=160, out_planes=320, stride=2)
-        self.bn = nn.BatchNorm2d(320)
-        self.relu = nn.ReLU(inplace=True)
-        self.FC1 = nn.Linear(320, 10)
-
-    def _make_layer_encoder(self, depth, in_planes, out_planes, stride, dropRate = 0.0):
-        layers = []
-        for i in range(depth):
-            layers.append(BasicBlock(i == 0 and in_planes or out_planes, out_planes, i == 0 and stride or 1, dropRate))
-        return nn.Sequential(*layers)
-    
-    def forward(self, x):
-        x = self.in_layer(x)
-        x = self.block1(x)
-        x = self.block2(x)
-        x = self.block3(x)
-        x = self.relu(self.bn(x))
-        x = F.avg_pool2d(x, 8)
-        x = x.view(-1, 320)
-        return self.FC1(x)
