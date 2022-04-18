@@ -66,7 +66,7 @@ def train(vae_model, c_model, data_loader, vae_optimizer, c_optimizer, epoch_num
         c_optimizer.zero_grad()
         x_hat, mean, log_v, x_ = vae_model(data)
         # x_cat = torch.cat((mean, log_v),1)
-        logit = c_model(x_.detach().view(-1,160,8,8))
+        logit = c_model(x_.detach().view(-1,128,8,8))
         #logit = c_model(x_cat)
         v_loss, c_loss, r_loss, kld_loss = loss_function_mean(data, target, x_hat, mean, log_v, logit)
         #print(loss)
@@ -93,7 +93,7 @@ def eval_train(vae_model, c_model, train_loader):
         for data, target in train_loader:
             data, target = data.to(device), target.to(device)
             x_hat, mean, log_v, x_ = vae_model(data)
-            logit = c_model(x_.detach().view(-1,160,8,8))
+            logit = c_model(x_.detach().view(-1,128,8,8))
             err_num += (logit.data.max(1)[1] != target.data).float().sum()
     print('train error num:{}'.format(err_num))
 
@@ -105,7 +105,7 @@ def eval_test(vae_model, c_model):
         for data, target in test_loader:
             data, target = data.to(device), target.to(device)
             x_hat, mean, log_v, x_ = vae_model(data)
-            logit = c_model(x_.detach().view(-1,160,8,8))
+            logit = c_model(x_.detach().view(-1,128,8,8))
             err_num += (logit.data.max(1)[1] != target.data).float().sum()
     print('test error num:{}'.format(err_num))
 
@@ -126,7 +126,7 @@ def test(vae_model, c_model, source_model):
         x_adv = pgd_cifar(vae_model, c_model, data, target, 20, 0.03, 0.003)
         # x_adv = pgd_cifar_blackbox(vae_model, c_model, source_model, data, target, 20, 0.03, 0.003)
         _,_,_,x_ = vae_model(x_adv)
-        logit_adv = c_model(x_.view(-1,160,8,8))
+        logit_adv = c_model(x_.view(-1,128,8,8))
         logit_adv_new = testtime_update_cifar(vae_model, c_model, x_adv, target,learning_rate=0.1, num=100)
         label_adv = logit_calculate(logit_adv, logit_adv_new).to(device)
         # logit_adv = diff_update_cifar(vae_model,c_model, x_adv, target,learning_rate=0.05, num=100)

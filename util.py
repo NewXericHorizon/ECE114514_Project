@@ -97,7 +97,7 @@ def testtime_update_cifar(vae_model, c_model, x_adv, target, learning_rate=0.1, 
             x_.data -= learning_rate * x_.grad.data
         x_.grad.data.zero_()
         x_hat_adv = vae_model.re_forward(x_)
-    logit_adv = c_model(x_.view(-1,160,8,8))
+    logit_adv = c_model(x_.view(-1,128,8,8))
     return logit_adv
 
 
