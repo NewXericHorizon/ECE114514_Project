@@ -52,7 +52,7 @@ train_loader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size,
 testset = torchvision.datasets.CIFAR10(root='../data', train=False, download=True, transform=transform_test)
 test_loader = torch.utils.data.DataLoader(testset, batch_size=args.test_batch_size, shuffle=False, **kwargs)
 
-def train(vae_model, c_model, data_loader, vae_optimizer, c_optimizer, epoch_num):
+def train(vae_model, c_model, data_loader, vae_optimizer, c_optimizer, epoch_num, channel=128):
     vae_model.train()
     c_model.train()
     v_loss_sum = 0
@@ -66,7 +66,7 @@ def train(vae_model, c_model, data_loader, vae_optimizer, c_optimizer, epoch_num
         c_optimizer.zero_grad()
         x_hat, mean, log_v, x_ = vae_model(data)
         # x_cat = torch.cat((mean, log_v),1)
-        logit = c_model(x_.detach().view(-1,128,8,8))
+        logit = c_model(x_.detach().view(-1,channel,8,8))
         #logit = c_model(x_cat)
         v_loss, c_loss, r_loss, kld_loss = loss_function_mean(data, target, x_hat, mean, log_v, logit)
         #print(loss)
@@ -118,7 +118,7 @@ def test(vae_model, c_model, source_model):
         data, target = data.to(device), target.to(device)
         data = Variable(data.data, requires_grad=True)
         _,_,_,x_ = vae_model(data)
-        logit = c_model(x_.view(-1,160,8,8))
+        logit = c_model(x_.view(-1,128,8,8))
         logit_new = testtime_update_cifar(vae_model, c_model, data, target,learning_rate=0.01, num=100)
         label = logit_calculate(logit, logit_new).to(device)
 
@@ -151,16 +151,16 @@ def adjust_learning_rate(optimizer, epoch, lr):
         param_group['lr'] = lr_
 
 def main():
-    vae_model = wide_VAE(zDim=256).to(device)
+    vae_model = wide_VAE(zDim=256, channel=[16,90,180]).to(device)
     vae_optimizer = optim.Adam(vae_model.parameters(), lr=args.lr)
-    c_model = classifier().to(device)
+    c_model = classifier(input_dim=180).to(device)
     c_optimizer = optim.Adam(c_model.parameters(), lr=args.lr*10)
     if args.test_num == 0:
         print('training mode')
         for epoch in range(1, args.epochs+1):
 
             adjust_learning_rate(c_optimizer, epoch, args.lr*10)
-            v_loss, c_loss, r_loss, k_loss = train(vae_model,c_model, train_loader, vae_optimizer, c_optimizer, epoch)
+            v_loss, c_loss, r_loss, k_loss = train(vae_model,c_model, train_loader, vae_optimizer, c_optimizer, epoch,channel=180)
             print('Epoch {}: reconstruction Average loss: {:.6f}'.format(epoch, r_loss/len(train_loader.dataset)))
             print('Epoch {}: KLD Average loss: {:.6f}'.format(epoch, k_loss/len(train_loader.dataset)))
             print('Epoch {}: VAE Average loss: {:.6f}'.format(epoch, v_loss/len(train_loader.dataset)))

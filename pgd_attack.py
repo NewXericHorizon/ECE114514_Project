@@ -6,14 +6,14 @@ from torchvision import datasets, transforms
 import torch.optim as optim
 
 
-def pgd_cifar(vae_model, c_model, X, label, num_steps, epsilon, step_size):
+def pgd_cifar(vae_model, c_model, X, label, num_steps, epsilon, step_size, channel=128):
     X_pgd = Variable(X.data, requires_grad=True)
     for _ in range(num_steps):
         opt = optim.SGD([X_pgd], lr=1e-3)
         opt.zero_grad()
         with torch.enable_grad():
             _, _, _, x_ = vae_model(X_pgd)
-            logit = c_model(x_.view(-1,128,8,8))
+            logit = c_model(x_.view(-1,channel,8,8))
             loss = nn.CrossEntropyLoss()(logit, label)
         loss.backward()
         eta = step_size * X_pgd.grad.data.sign()
