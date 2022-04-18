@@ -80,7 +80,7 @@ def testtime_update_mnist_new(vae_model, c_model, x_adv, target, learning_rate=0
     logit_adv = c_model(x_.view(-1,120,7,7))
     return logit_adv
 
-def testtime_update_cifar(vae_model, c_model, x_adv, target, learning_rate=0.1, num = 30, mode = 'mean'):
+def testtime_update_cifar(vae_model, c_model, x_adv, target, learning_rate=0.1, num = 30, mode = 'mean', channel=128):
     x_adv = x_adv.detach()
     x_hat_adv, _, _, x_ = vae_model(x_adv)
     for _ in range(num):
@@ -97,7 +97,7 @@ def testtime_update_cifar(vae_model, c_model, x_adv, target, learning_rate=0.1, 
             x_.data -= learning_rate * x_.grad.data
         x_.grad.data.zero_()
         x_hat_adv = vae_model.re_forward(x_)
-    logit_adv = c_model(x_.view(-1,128,8,8))
+    logit_adv = c_model(x_.view(-1,channel,8,8))
     return logit_adv
 
 

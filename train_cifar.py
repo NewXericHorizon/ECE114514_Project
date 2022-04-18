@@ -93,7 +93,7 @@ def eval_train(vae_model, c_model, train_loader):
         for data, target in train_loader:
             data, target = data.to(device), target.to(device)
             x_hat, mean, log_v, x_ = vae_model(data)
-            logit = c_model(x_.detach().view(-1,128,8,8))
+            logit = c_model(x_.detach().view(-1,180,8,8))
             err_num += (logit.data.max(1)[1] != target.data).float().sum()
     print('train error num:{}'.format(err_num))
 
@@ -105,11 +105,11 @@ def eval_test(vae_model, c_model):
         for data, target in test_loader:
             data, target = data.to(device), target.to(device)
             x_hat, mean, log_v, x_ = vae_model(data)
-            logit = c_model(x_.detach().view(-1,128,8,8))
+            logit = c_model(x_.detach().view(-1,180,8,8))
             err_num += (logit.data.max(1)[1] != target.data).float().sum()
     print('test error num:{}'.format(err_num))
 
-def test(vae_model, c_model, source_model):
+def test(vae_model, c_model, source_model, channel=128):
     err_num = 0
     err_adv = 0
     c_model.eval()
@@ -118,16 +118,16 @@ def test(vae_model, c_model, source_model):
         data, target = data.to(device), target.to(device)
         data = Variable(data.data, requires_grad=True)
         _,_,_,x_ = vae_model(data)
-        logit = c_model(x_.view(-1,128,8,8))
-        logit_new = testtime_update_cifar(vae_model, c_model, data, target,learning_rate=0.01, num=100)
+        logit = c_model(x_.view(-1,channel,8,8))
+        logit_new = testtime_update_cifar(vae_model, c_model, data, target,learning_rate=0.01, num=100, channel=channel)
         label = logit_calculate(logit, logit_new).to(device)
 
         err_num += (label.data != target.data).float().sum()
-        x_adv = pgd_cifar(vae_model, c_model, data, target, 20, 0.03, 0.003)
+        x_adv = pgd_cifar(vae_model, c_model, data, target, 20, 0.03, 0.003, channel=channel)
         # x_adv = pgd_cifar_blackbox(vae_model, c_model, source_model, data, target, 20, 0.03, 0.003)
         _,_,_,x_ = vae_model(x_adv)
-        logit_adv = c_model(x_.view(-1,128,8,8))
-        logit_adv_new = testtime_update_cifar(vae_model, c_model, x_adv, target,learning_rate=0.1, num=100)
+        logit_adv = c_model(x_.view(-1,channel,8,8))
+        logit_adv_new = testtime_update_cifar(vae_model, c_model, x_adv, target,learning_rate=0.1, num=100, channel=channel)
         label_adv = logit_calculate(logit_adv, logit_adv_new).to(device)
         # logit_adv = diff_update_cifar(vae_model,c_model, x_adv, target,learning_rate=0.05, num=100)
         # _,_,_,x_ = vae_model(x_adv)
@@ -180,7 +180,7 @@ def main():
         c_model_path = '{}/cifar-c-model-{}.pt'.format(args.model_dir, args.test_num)
         vae_model.load_state_dict(torch.load(vae_model_path))
         c_model.load_state_dict(torch.load(c_model_path))
-        test(vae_model, c_model,source_model)
+        test(vae_model, c_model,source_model, channel=180)
     
 
 if __name__ == '__main__':
