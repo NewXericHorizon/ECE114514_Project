@@ -31,19 +31,19 @@ class BasicBlock(nn.Module):
 
 
 class wide_VAE(nn.Module):
-    def __init__(self, featureDim = 160*8*8, zDim = 512, dropRate = 0.0):
+    def __init__(self, featureDim = 128*8*8, zDim = 512, dropRate = 0.0):
         super(wide_VAE, self).__init__()
         self.featureDim = featureDim
         self.in_layer = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1, bias=False)
-        self.enc_block1 = self._make_layer_encoder(2, in_planes=16, out_planes=80, stride=2)
-        self.enc_block2 = self._make_layer_encoder(2, in_planes=80, out_planes=160, stride=2)
-        self.norm = nn.BatchNorm2d(160)
+        self.enc_block1 = self._make_layer_encoder(2, in_planes=16, out_planes=64, stride=2)
+        self.enc_block2 = self._make_layer_encoder(2, in_planes=64, out_planes=128, stride=2)
+        self.norm = nn.BatchNorm2d(128)
         self.encFC1 = nn.Linear(featureDim, zDim)
         self.encFC2 = nn.Linear(featureDim, zDim)
 
         self.decFC1 = nn.Linear(zDim, featureDim)
-        self.dec_block1 = self._make_layer_decoder(2, in_planes=160, out_planes=80 ,stride=2)
-        self.dec_block2 = self._make_layer_decoder(2, in_planes=80, out_planes=16, stride=2)
+        self.dec_block1 = self._make_layer_decoder(2, in_planes=128, out_planes=64 ,stride=2)
+        self.dec_block2 = self._make_layer_decoder(2, in_planes=64, out_planes=16, stride=2)
         self.out_layer = nn.Conv2d(16, 3, kernel_size=3, stride=1, padding=1, bias=False)
 
         for m in self.modules():
@@ -83,7 +83,8 @@ class wide_VAE(nn.Module):
         x = self.enc_block1(x)
         x = self.enc_block2(x)
         x = F.relu(self.norm(x))
-        x = x.view(-1, self.featureDim)
+        # x = x.view(-1, self.featureDim)
+        x = x.view(-1, 128*8*8)
         mu = self.encFC1(x)
         logVar = self.encFC2(x)
         return mu, logVar, x
@@ -96,7 +97,7 @@ class wide_VAE(nn.Module):
 
     def decoder(self, z):
         z = F.relu(self.decFC1(z))
-        z = z.view(-1, 160, 8, 8)
+        z = z.view(-1, 128, 8, 8)
         z = self.dec_block1(z)
         z = self.dec_block2(z)
         z = torch.sigmoid(self.out_layer(z))
@@ -117,12 +118,12 @@ class wide_VAE(nn.Module):
         return out
 
 class classifier(nn.Module):
-    def __init__(self, input_dim = 160, feature_dim=10):
+    def __init__(self, input_dim = 128, feature_dim=10):
         super(classifier, self).__init__()
         self.out_dim = input_dim*4
         self.in_layer = nn.Conv2d(input_dim, input_dim, kernel_size=3, stride=1, padding=1, bias=False)
         self.block1 = self._make_layer(3, input_dim, int(input_dim*2), 1)
-        self.block2 = self._make_layer(3, int(input_dim*2), self.out_dim, 2)
+        self.block2 = self._make_layer(3, int(input_dim*2), self.out_dim,2)
         self.bn = nn.BatchNorm2d(self.out_dim)
         self.relu = nn.ReLU(inplace=True)
         self.FC = nn.Linear(self.out_dim, 10)

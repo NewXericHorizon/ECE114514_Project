@@ -1,3 +1,4 @@
+from cmath import log
 import torch
 import torchvision
 import torch.nn as nn
@@ -53,11 +54,11 @@ def train(vae_model, c_model, data_loader, vae_optimizer, c_optimizer, epoch_num
         data, target = data.to(device), target.to(device)
         vae_optimizer.zero_grad()
         c_optimizer.zero_grad()
-        x_hat, mean, log_v = vae_model(data)
-        x_cat = torch.cat((mean, log_v),1)
+        x_hat, mean, log_v, x_ = vae_model(data)
+        x_cat = torch.cat((mean, log_v), 1)
         logit = c_model(x_cat.detach())
         #logit = c_model(x_cat)
-        v_loss, c_loss = loss_function_sum(data, target, x_hat, mean, log_v, logit, args.beta)
+        v_loss, c_loss,_,_ = loss_function_sum(data, target, x_hat, mean, log_v, logit, args.beta)
         v_loss_sum += v_loss
         c_loss_sum += c_loss
         
@@ -78,10 +79,13 @@ def test(vae_model, c_model):
     vae_model.eval()
     for data, target in test_loader:
         data, target = data.to(device), target.to(device)
-        logit = model_pred(data, vae_model, c_model)
+        _,mean,log_v,x_ = vae_model(data)
+        x_cat = torch.cat((mean, log_v), 1)
+        logit = c_model(x_cat)
+
         err_num += (logit.data.max(1)[1] != target.data).float().sum()
         x_adv = pgd_mnist(vae_model, c_model, data, target, 40, 0.3, 0.01)
-        logit_adv = diff_update_mnist(vae_model, c_model, x_adv, target, learning_rate=0.1, num=100, mode = 'sum')
+        logit_adv = testtime_update_mnist(vae_model, c_model, x_adv, learning_rate=0.1, num=20, mode = 'sum')
         # logit_adv = model_pred(x_adv, vae_model, c_model)
         # logit_adv = testtime_update_mnist(vae_model, c_model, x_adv, learning_rate=0.1, num=100, mode = 'mean')
         adv_num = (logit_adv.data.max(1)[1] != target.data).float().sum()
@@ -98,9 +102,9 @@ def eval_train(vae_model, c_model):
     with torch.no_grad():
         for data, target in train_loader:
             data, target = data.to(device), target.to(device)
-            x_hat, mean, log_v = vae_model(data)
-            x_cat = torch.cat((mean, log_v),1)
-            logit = c_model(x_cat.detach())
+            _, mean, log_v, x_ = vae_model(data)
+            x_cat = torch.cat((mean, log_v), 1)
+            logit = c_model(x_cat)
             err_num += (logit.data.max(1)[1] != target.data).float().sum()
     print('train error num:{}'.format(err_num))
 
@@ -111,9 +115,9 @@ def eval_test(vae_model, c_model):
     with torch.no_grad():
         for data, target in test_loader:
             data, target = data.to(device), target.to(device)
-            x_hat, mean, log_v = vae_model(data)
-            x_cat = torch.cat((mean, log_v),1)
-            logit = c_model(x_cat.detach())
+            _,mean,log_v, _ = vae_model(data)
+            x_cat = torch.cat((mean, log_v), 1)
+            logit = c_model(x_cat)
             err_num += (logit.data.max(1)[1] != target.data).float().sum()
     print('test error num:{}'.format(err_num))
 
@@ -132,9 +136,9 @@ def adjust_learning_rate(vae_optimizer,c_optimizer, epoch):
         param_group['lr'] = lr
 
 def main():
-    vae_model = VAE(zDim=args.latent_dim).to(device)
+    vae_model = VAE().to(device)
     vae_optimizer = optim.Adam(vae_model.parameters(), lr=args.lr)
-    c_model = classifier(input_dim=args.latent_dim*2).to(device)
+    c_model = classifier().to(device)
     c_optimizer = optim.Adam(c_model.parameters(), lr=args.lr)
     if args.test_num == 0:
         print(len(train_loader.dataset))

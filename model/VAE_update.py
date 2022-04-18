@@ -34,7 +34,7 @@ class VAE(nn.Module):
     def __init__(self, featureDim = 120*7*7, zDim = 256, dropRate = 0.0):
         super(VAE, self).__init__()
         self.featureDim = featureDim
-        self.in_layer = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1, bias=False)
+        self.in_layer = nn.Conv2d(1, 16, kernel_size=3, stride=1, padding=1, bias=False)
         self.enc_block1 = self._make_layer_encoder(2, in_planes=16, out_planes=60, stride=2)
         self.enc_block2 = self._make_layer_encoder(2, in_planes=60, out_planes=120, stride=2)
         self.norm = nn.BatchNorm2d(120)
@@ -44,7 +44,7 @@ class VAE(nn.Module):
         self.decFC1 = nn.Linear(zDim, featureDim)
         self.dec_block1 = self._make_layer_decoder(2, in_planes=120, out_planes=60 ,stride=2)
         self.dec_block2 = self._make_layer_decoder(2, in_planes=60, out_planes=16, stride=2)
-        self.out_layer = nn.Conv2d(16, 3, kernel_size=3, stride=1, padding=1, bias=False)
+        self.out_layer = nn.Conv2d(16, 1, kernel_size=3, stride=1, padding=1, bias=False)
 
         for m in self.modules():
             if isinstance(m, (nn.Conv2d)):
@@ -96,7 +96,7 @@ class VAE(nn.Module):
 
     def decoder(self, z):
         z = F.relu(self.decFC1(z))
-        z = z.view(-1, 160, 8, 8)
+        z = z.view(-1, 120, 7, 7)
         z = self.dec_block1(z)
         z = self.dec_block2(z)
         z = torch.sigmoid(self.out_layer(z))

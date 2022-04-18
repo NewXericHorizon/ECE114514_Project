@@ -6,7 +6,7 @@ from typing import List, Callable, Union, Any, TypeVar, Tuple
 from torchvision.models.resnet import conv3x3
 
 class VAE(nn.Module):
-    def __init__(self, imgChannels=1, featureDim=64*7*7, zDim=256):
+    def __init__(self, imgChannels=1, featureDim=64*7*7, zDim=64):
         super(VAE, self).__init__()
 
         # Initializing the 2 convolutional layers and 2 full-connected layers for the encoder
@@ -47,7 +47,7 @@ class VAE(nn.Module):
         x = x.view(-1, 64*7*7)
         mu = self.encFC1(x)
         logVar = self.encFC2(x)
-        return mu, logVar
+        return mu, logVar, x
 
     def reparameterize(self, mu, logVar):
         #Reparameterization takes in the input mu and logVar and sample the mu + std * eps
@@ -69,14 +69,21 @@ class VAE(nn.Module):
     def forward(self, x):
         # The entire pipeline of the VAE: encoder -> reparameterization -> decoder
         # output, mu, and logVar are returned for loss computation
-        mu, logVar = self.encoder(x)
+        mu, logVar, x_ = self.encoder(x)
         z = self.reparameterize(mu, logVar)
         out = self.decoder(z)
-        return out, mu, logVar
+        return out, mu, logVar, x_
+
+    def re_forward(self, x):
+        mu = self.encFC1(x)
+        logVar = self.encFC2(x)
+        z = self.reparameterize(mu, logVar)
+        out = self.decoder(z)
+        return out
 
 
 class classifier(nn.Module):
-    def __init__(self, input_dim = 256*2, feature_dim = 10):
+    def __init__(self, input_dim = 64*2, feature_dim = 10):
         super(classifier, self).__init__()
         # self.encConv1 = nn.Conv2d(1, 32, 3, padding=1)
         # self.encConv2 = nn.Conv2d(32, 32, 3, padding=1)

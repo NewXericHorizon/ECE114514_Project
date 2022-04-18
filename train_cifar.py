@@ -3,6 +3,7 @@ import torchvision
 import torch.nn as nn
 from torch.autograd import Variable
 from torchvision import datasets, transforms
+from blackbox_pgd_model.wideresnet_update import *
 from model.wideVAE import *
 from pgd_attack import *
 import torch.optim as optim
@@ -12,12 +13,12 @@ from util import *
 import os
 os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 VAE Training')
-parser.add_argument('--batch-size', type=int, default=256, metavar='N',
+parser.add_argument('--batch-size', type=int, default=400, metavar='N',
                     help='input batch size for training (default: 128)')
-parser.add_argument('--test-batch-size', type=int, default=256, metavar='N',
+parser.add_argument('--test-batch-size', type=int, default=400, metavar='N',
                     help='input batch size for testing (default: 128)')
 parser.add_argument('--latent-dim', type=int, default=256)
-parser.add_argument('--epochs', type=int, default=100)
+parser.add_argument('--epochs', type=int, default=97)
 parser.add_argument('--testtime-epochs', type=int, default=20)
 parser.add_argument('--testtime-lr',  default=0.1)
 parser.add_argument('--lr', default=0.001)
@@ -35,6 +36,7 @@ torch.backends.cudnn.deterministic = True
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if use_cuda else "cpu")
 kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
+
 transform_train = transforms.Compose([
     transforms.RandomCrop(32, padding=4),
     transforms.RandomHorizontalFlip(),
@@ -43,6 +45,8 @@ transform_train = transforms.Compose([
 transform_test = transforms.Compose([
     transforms.ToTensor(),
 ])
+# f=open("./output-log/cifar_test.txt","a")
+
 trainset = torchvision.datasets.CIFAR10(root='../data', train=True, download=True, transform=transform_train)
 train_loader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, **kwargs)
 testset = torchvision.datasets.CIFAR10(root='../data', train=False, download=True, transform=transform_test)
@@ -53,6 +57,8 @@ def train(vae_model, c_model, data_loader, vae_optimizer, c_optimizer, epoch_num
     c_model.train()
     v_loss_sum = 0
     c_loss_sum = 0
+    r_loss_sum = 0
+    kld_loss_sum = 0
     for batch_idx, (data, target) in enumerate(data_loader):
         #data = data.view(batch_size, x_dim)
         data, target = data.to(device), target.to(device)
@@ -62,12 +68,14 @@ def train(vae_model, c_model, data_loader, vae_optimizer, c_optimizer, epoch_num
         # x_cat = torch.cat((mean, log_v),1)
         logit = c_model(x_.detach().view(-1,160,8,8))
         #logit = c_model(x_cat)
-        v_loss, c_loss = loss_function_mean(data, target, x_hat, mean, log_v, logit)
+        v_loss, c_loss, r_loss, kld_loss = loss_function_mean(data, target, x_hat, mean, log_v, logit)
         #print(loss)
+        r_loss_sum += r_loss
+        kld_loss_sum += kld_loss
         v_loss_sum += v_loss
         c_loss_sum += c_loss
         # if epoch_num % 2 == 1:
-        if epoch_num <= 40:
+        if epoch_num <= 30:
             v_loss.backward()
             vae_optimizer.step()
             c_loss.backward()
@@ -75,9 +83,9 @@ def train(vae_model, c_model, data_loader, vae_optimizer, c_optimizer, epoch_num
             c_loss.backward()
             c_optimizer.step()
             v_loss.backward()
-    return v_loss_sum, c_loss_sum
+    return v_loss_sum, c_loss_sum, r_loss_sum, kld_loss_sum
 
-def eval_train(vae_model, c_model):
+def eval_train(vae_model, c_model, train_loader):
     vae_model.eval()
     c_model.eval()
     err_num = 0
@@ -101,7 +109,7 @@ def eval_test(vae_model, c_model):
             err_num += (logit.data.max(1)[1] != target.data).float().sum()
     print('test error num:{}'.format(err_num))
 
-def test(vae_model, c_model):
+def test(vae_model, c_model, source_model):
     err_num = 0
     err_adv = 0
     c_model.eval()
@@ -111,17 +119,20 @@ def test(vae_model, c_model):
         data = Variable(data.data, requires_grad=True)
         _,_,_,x_ = vae_model(data)
         logit = c_model(x_.view(-1,160,8,8))
-        
-        err_num += (logit.data.max(1)[1] != target.data).float().sum()
+        logit_new = testtime_update_cifar(vae_model, c_model, data, target,learning_rate=0.01, num=100)
+        label = logit_calculate(logit, logit_new).to(device)
+
+        err_num += (label.data != target.data).float().sum()
         x_adv = pgd_cifar(vae_model, c_model, data, target, 20, 0.03, 0.003)
-        logit_adv = testtime_update_cifar(vae_model, c_model, x_adv, target,learning_rate=0.1, num=50)
-        # logit_adv = diff_update_cifar(vae_model,c_model, x_adv,target,learning_rate=0.1, num=30, mode = 'mean')
-        # logit = c_model(x_.view(-1,160,8,8))
-        adv_num = (logit_adv.data.max(1)[1] != target.data).float().sum()
-        print(adv_num)
-        err_adv += adv_num
-        # x_cat_adv = torch.cat((m_adv, log_adv), 1)
-        # logit_adv = c_model(x_cat_adv)
+        # x_adv = pgd_cifar_blackbox(vae_model, c_model, source_model, data, target, 20, 0.03, 0.003)
+        _,_,_,x_ = vae_model(x_adv)
+        logit_adv = c_model(x_.view(-1,160,8,8))
+        logit_adv_new = testtime_update_cifar(vae_model, c_model, x_adv, target,learning_rate=0.1, num=100)
+        label_adv = logit_calculate(logit_adv, logit_adv_new).to(device)
+        # logit_adv = diff_update_cifar(vae_model,c_model, x_adv, target,learning_rate=0.05, num=100)
+        # _,_,_,x_ = vae_model(x_adv)
+        # logit_adv = c_model(x_.view(-1,160,8,8))
+        err_adv += (label_adv.data != target.data).float().sum()
         # err_adv += (logit_adv.data.max(1)[1] != target.data).float().sum()
     print(len(test_loader.dataset))
     print(err_num)
@@ -133,38 +144,43 @@ def adjust_learning_rate(optimizer, epoch, lr):
     if epoch >= 80:
         lr_ = lr * 0.1
     if epoch >= 90:
-        lr_ = lr * 0.05
+        lr_ = lr * 0.01
     if epoch >= 110:
         lr_ = lr * 0.01
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr_
 
 def main():
-    vae_model = wide_VAE(zDim=args.latent_dim).to(device)
+    vae_model = wide_VAE(zDim=256).to(device)
     vae_optimizer = optim.Adam(vae_model.parameters(), lr=args.lr)
     c_model = classifier().to(device)
     c_optimizer = optim.Adam(c_model.parameters(), lr=args.lr*10)
-    print(len(train_loader.dataset))
     if args.test_num == 0:
         print('training mode')
         for epoch in range(1, args.epochs+1):
+
             adjust_learning_rate(c_optimizer, epoch, args.lr*10)
-            v_loss, c_loss = train(vae_model,c_model, train_loader, vae_optimizer, c_optimizer, epoch)
+            v_loss, c_loss, r_loss, k_loss = train(vae_model,c_model, train_loader, vae_optimizer, c_optimizer, epoch)
+            print('Epoch {}: reconstruction Average loss: {:.6f}'.format(epoch, r_loss/len(train_loader.dataset)))
+            print('Epoch {}: KLD Average loss: {:.6f}'.format(epoch, k_loss/len(train_loader.dataset)))
             print('Epoch {}: VAE Average loss: {:.6f}'.format(epoch, v_loss/len(train_loader.dataset)))
             print('Epoch {}: Classifier Average loss: {:.6f}'.format(epoch, c_loss/len(train_loader.dataset)))
-            eval_train(vae_model, c_model)
+            eval_train(vae_model, c_model, train_loader)
             eval_test(vae_model, c_model)
             print('==================================================')
             if epoch > 75:
                 torch.save(vae_model.state_dict(), os.path.join(args.model_dir, 'cifar-vae-model-{}.pt'.format(epoch)))
                 torch.save(c_model.state_dict(), os.path.join(args.model_dir, 'cifar-c-model-{}.pt'.format(epoch)))
     else:
+        source_model = WideResNet().to(device)
+        source_model_path = './blackbox_pgd_model/model-wideres-epoch76.pt'
         print('testing mode')
+        # source_model.load_state_dict(torch.load(source_model_path))
         vae_model_path = '{}/cifar-vae-model-{}.pt'.format(args.model_dir, args.test_num)
         c_model_path = '{}/cifar-c-model-{}.pt'.format(args.model_dir, args.test_num)
         vae_model.load_state_dict(torch.load(vae_model_path))
         c_model.load_state_dict(torch.load(c_model_path))
-        test(vae_model, c_model)
+        test(vae_model, c_model,source_model)
     
 
 if __name__ == '__main__':
