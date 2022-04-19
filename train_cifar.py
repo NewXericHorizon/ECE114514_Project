@@ -18,7 +18,7 @@ parser.add_argument('--batch-size', type=int, default=400, metavar='N',
 parser.add_argument('--test-batch-size', type=int, default=400, metavar='N',
                     help='input batch size for testing (default: 128)')
 parser.add_argument('--latent-dim', type=int, default=256)
-parser.add_argument('--epochs', type=int, default=97)
+parser.add_argument('--epochs', type=int, default=90)
 parser.add_argument('--testtime-epochs', type=int, default=20)
 parser.add_argument('--testtime-lr',  default=0.1)
 parser.add_argument('--lr', default=0.001)
@@ -85,7 +85,7 @@ def train(vae_model, c_model, data_loader, vae_optimizer, c_optimizer, epoch_num
             v_loss.backward()
     return v_loss_sum, c_loss_sum, r_loss_sum, kld_loss_sum
 
-def eval_train(vae_model, c_model, train_loader):
+def eval_train(vae_model, c_model, train_loader, channel):
     vae_model.eval()
     c_model.eval()
     err_num = 0
@@ -93,11 +93,11 @@ def eval_train(vae_model, c_model, train_loader):
         for data, target in train_loader:
             data, target = data.to(device), target.to(device)
             x_hat, mean, log_v, x_ = vae_model(data)
-            logit = c_model(x_.detach().view(-1,180,8,8))
+            logit = c_model(x_.detach().view(-1,channel,8,8))
             err_num += (logit.data.max(1)[1] != target.data).float().sum()
     print('train error num:{}'.format(err_num))
 
-def eval_test(vae_model, c_model):
+def eval_test(vae_model, c_model, channel):
     vae_model.eval()
     c_model.eval()
     err_num = 0
@@ -105,13 +105,14 @@ def eval_test(vae_model, c_model):
         for data, target in test_loader:
             data, target = data.to(device), target.to(device)
             x_hat, mean, log_v, x_ = vae_model(data)
-            logit = c_model(x_.detach().view(-1,180,8,8))
+            logit = c_model(x_.detach().view(-1,channel,8,8))
             err_num += (logit.data.max(1)[1] != target.data).float().sum()
     print('test error num:{}'.format(err_num))
 
 def test(vae_model, c_model, source_model, channel=128):
     err_num = 0
     err_adv = 0
+    err_nat = 0
     c_model.eval()
     vae_model.eval()
     for data, target in test_loader:
@@ -119,7 +120,8 @@ def test(vae_model, c_model, source_model, channel=128):
         data = Variable(data.data, requires_grad=True)
         _,_,_,x_ = vae_model(data)
         logit = c_model(x_.view(-1,channel,8,8))
-        logit_new = testtime_update_cifar(vae_model, c_model, data, target,learning_rate=0.01, num=100, channel=channel)
+        err_nat += (logit.data.max(1)[1] != target.data).float().sum()
+        logit_new = testtime_update_cifar(vae_model, c_model, data, target,learning_rate=0.001, num=30, channel=channel)
         label = logit_calculate(logit, logit_new).to(device)
 
         err_num += (label.data != target.data).float().sum()
@@ -135,6 +137,7 @@ def test(vae_model, c_model, source_model, channel=128):
         err_adv += (label_adv.data != target.data).float().sum()
         # err_adv += (logit_adv.data.max(1)[1] != target.data).float().sum()
     print(len(test_loader.dataset))
+    print(err_nat)
     print(err_num)
     print(err_adv)
 
@@ -151,22 +154,23 @@ def adjust_learning_rate(optimizer, epoch, lr):
         param_group['lr'] = lr_
 
 def main():
-    vae_model = wide_VAE(zDim=256, channel=[16,90,180]).to(device)
+    channel = [16,90,180]
+    vae_model = wide_VAE(zDim=256, channel=channel).to(device)
     vae_optimizer = optim.Adam(vae_model.parameters(), lr=args.lr)
-    c_model = classifier(input_dim=180).to(device)
+    c_model = classifier(input_dim=channel[2]).to(device)
     c_optimizer = optim.Adam(c_model.parameters(), lr=args.lr*10)
     if args.test_num == 0:
         print('training mode')
         for epoch in range(1, args.epochs+1):
 
             adjust_learning_rate(c_optimizer, epoch, args.lr*10)
-            v_loss, c_loss, r_loss, k_loss = train(vae_model,c_model, train_loader, vae_optimizer, c_optimizer, epoch,channel=180)
+            v_loss, c_loss, r_loss, k_loss = train(vae_model,c_model, train_loader, vae_optimizer, c_optimizer, epoch,channel=channel[2])
             print('Epoch {}: reconstruction Average loss: {:.6f}'.format(epoch, r_loss/len(train_loader.dataset)))
             print('Epoch {}: KLD Average loss: {:.6f}'.format(epoch, k_loss/len(train_loader.dataset)))
             print('Epoch {}: VAE Average loss: {:.6f}'.format(epoch, v_loss/len(train_loader.dataset)))
             print('Epoch {}: Classifier Average loss: {:.6f}'.format(epoch, c_loss/len(train_loader.dataset)))
-            eval_train(vae_model, c_model, train_loader)
-            eval_test(vae_model, c_model)
+            eval_train(vae_model, c_model, train_loader, channel[2])
+            eval_test(vae_model, c_model, channel[2])
             print('==================================================')
             if epoch > 75:
                 torch.save(vae_model.state_dict(), os.path.join(args.model_dir, 'cifar-vae-model-{}.pt'.format(epoch)))
@@ -180,7 +184,7 @@ def main():
         c_model_path = '{}/cifar-c-model-{}.pt'.format(args.model_dir, args.test_num)
         vae_model.load_state_dict(torch.load(vae_model_path))
         c_model.load_state_dict(torch.load(c_model_path))
-        test(vae_model, c_model,source_model, channel=180)
+        test(vae_model, c_model,source_model, channel=channel[2])
     
 
 if __name__ == '__main__':

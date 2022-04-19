@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.optim as optim
+
 def loss_function_mean(x, label, x_hat, mean, log_var, logit, beta = 0.5):
     v_loss, reproduction_loss, KLD = vae_loss_mean(x, x_hat, mean, log_var)
     c_loss = F.cross_entropy(logit, label, size_average=False)
@@ -78,6 +80,39 @@ def testtime_update_mnist_new(vae_model, c_model, x_adv, target, learning_rate=0
         x_hat_adv = vae_model.re_forward(x_)
  
     logit_adv = c_model(x_.view(-1,120,7,7))
+    return logit_adv
+
+def testtime_update_cifar_opt(vae_model, c_model, x_adv, target, learning_rate=0.1, num = 30, mode = 'mean', channel=128, opti = 'adam'):
+    x_adv = x_adv.detach()
+    x_hat_adv, _, _, x_ = vae_model(x_adv)
+    x_copy = x_.detach().clone()
+    if opti == 'adam':
+        opt = optim.Adam([x_copy], lr=learning_rate)
+    elif opti == 'sgd':
+        opt = optim.SGD([x_copy], lr=learning_rate, momentum=0.9)
+    for _ in range(num):
+        # opt.zero_grad()
+        if (x_hat_adv != x_hat_adv).sum() > 0:
+            print('nan Error')
+            exit()
+        if mode == 'mean':
+            loss = nn.functional.binary_cross_entropy(x_hat_adv, x_adv, size_average=False, reduction='mean')
+        else:
+            loss = nn.functional.binary_cross_entropy(x_hat_adv, x_adv, reduction='sum')
+        x_.retain_grad()
+        loss.backward(retain_graph=True)
+        grad = torch.autograd.grad(loss, x_)
+        # exit()
+        with torch.no_grad():
+            x_copy.grad = grad[0]
+        # with torch.no_grad():
+        #     x_.data -= learning_rate * x_.grad.data
+        x_.grad.data.zero_()
+        opt.step()
+        x_ = x_copy.detach().clone()
+        x_.requires_grad = True
+        x_hat_adv = vae_model.re_forward(x_)
+    logit_adv = c_model(x_.view(-1,channel,8,8))
     return logit_adv
 
 def testtime_update_cifar(vae_model, c_model, x_adv, target, learning_rate=0.1, num = 30, mode = 'mean', channel=128):
@@ -167,7 +202,7 @@ def logit_calculate(logit_old, logit_new):
     label_diff = logit_diff.data.max(1)[1]
     label_new = []
     for i in range(label_old.size(0)):
-        if abs(logit_diff[i][label_old[i]].item() / logit_old[i][label_old[i]].item()) <= 0.1:
+        if logit_diff[i][label_old[i]].item() / abs(logit_old[i][label_old[i]].item()) >= -0.1:
         # if logit_diff[i][label_old[i]] >= 0:
             label_new.append(label_old[i].item())
         else:
