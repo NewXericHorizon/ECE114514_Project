@@ -31,20 +31,22 @@ class BasicBlock(nn.Module):
 
 
 class VAE(nn.Module):
-    def __init__(self, featureDim = 120*7*7, zDim = 256, dropRate = 0.0):
+    def __init__(self, featureDim = 120*7*7, zDim = 256, dropRate = 0.0, channel = [16,60,120]):
         super(VAE, self).__init__()
+        self.channel = channel
+        featureDim = 7*7*channel[2]
         self.featureDim = featureDim
-        self.in_layer = nn.Conv2d(1, 16, kernel_size=3, stride=1, padding=1, bias=False)
-        self.enc_block1 = self._make_layer_encoder(2, in_planes=16, out_planes=60, stride=2)
-        self.enc_block2 = self._make_layer_encoder(2, in_planes=60, out_planes=120, stride=2)
-        self.norm = nn.BatchNorm2d(120)
+        self.in_layer = nn.Conv2d(1, channel[0], kernel_size=3, stride=1, padding=1, bias=False)
+        self.enc_block1 = self._make_layer_encoder(2, in_planes=channel[0], out_planes=channel[1], stride=2)
+        self.enc_block2 = self._make_layer_encoder(2, in_planes=channel[1], out_planes=channel[2], stride=2)
+        self.norm = nn.BatchNorm2d(channel[2])
         self.encFC1 = nn.Linear(featureDim, zDim)
         self.encFC2 = nn.Linear(featureDim, zDim)
 
         self.decFC1 = nn.Linear(zDim, featureDim)
-        self.dec_block1 = self._make_layer_decoder(2, in_planes=120, out_planes=60 ,stride=2)
-        self.dec_block2 = self._make_layer_decoder(2, in_planes=60, out_planes=16, stride=2)
-        self.out_layer = nn.Conv2d(16, 1, kernel_size=3, stride=1, padding=1, bias=False)
+        self.dec_block1 = self._make_layer_decoder(2, in_planes=channel[2], out_planes=channel[1] ,stride=2)
+        self.dec_block2 = self._make_layer_decoder(2, in_planes=channel[1], out_planes=channel[0], stride=2)
+        self.out_layer = nn.Conv2d(channel[0], 1, kernel_size=3, stride=1, padding=1, bias=False)
 
         for m in self.modules():
             if isinstance(m, (nn.Conv2d)):
@@ -96,7 +98,7 @@ class VAE(nn.Module):
 
     def decoder(self, z):
         z = F.relu(self.decFC1(z))
-        z = z.view(-1, 120, 7, 7)
+        z = z.view(-1, self.channel[2], 7, 7)
         z = self.dec_block1(z)
         z = self.dec_block2(z)
         z = torch.sigmoid(self.out_layer(z))
@@ -121,8 +123,8 @@ class classifier(nn.Module):
         super(classifier, self).__init__()
         self.out_dim = input_dim*2
         self.in_layer = nn.Conv2d(input_dim, input_dim, kernel_size=3, stride=1, padding=1, bias=False)
-        self.block1 = self._make_layer(3, input_dim, int(input_dim*2), 2)
-        # self.block2 = self._make_layer(3, int(input_dim*2), self.out_dim, 2)
+        self.block1 = self._make_layer(2, input_dim, int(input_dim*2), 2)
+        # self.block2 = self._make_layer(1, int(input_dim*2), self.out_dim, 2)
         self.bn = nn.BatchNorm2d(self.out_dim)
         self.relu = nn.ReLU(inplace=True)
         self.FC = nn.Linear(self.out_dim, 10)

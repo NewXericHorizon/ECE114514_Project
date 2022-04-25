@@ -57,17 +57,13 @@ def testtime_update_mnist(vae_model, c_model, x_adv, learning_rate=0.1, num = 30
     logit_adv = c_model(x_cat)
     return logit_adv
 
-def testtime_update_mnist_new(vae_model, c_model, x_adv, target, learning_rate=0.1, num = 30, mode = 'mean'):
+def testtime_update_mnist_new(vae_model, c_model, x_adv, target, learning_rate=0.1, num = 30, mode = 'mean', channel=120):
     x_adv = x_adv.detach()
     x_hat_adv, _, _, x_ = vae_model(x_adv)
     for _ in range(num):
-        c = 0
-        while (x_hat_adv != x_hat_adv).sum() > 0:
-            x_hat_adv = vae_model.re_forward(x_)
-            c += 1
-            if c >= 100:
-                print('nan Error', c)
-                exit()
+        if (x_hat_adv != x_hat_adv).sum() > 0:
+            print('nan Error')
+            exit()
         if mode == 'mean':
             loss = nn.functional.binary_cross_entropy(x_hat_adv, x_adv, size_average=False, reduction='mean')
         else:
@@ -78,13 +74,46 @@ def testtime_update_mnist_new(vae_model, c_model, x_adv, target, learning_rate=0
             x_.data -= learning_rate * x_.grad.data
         x_.grad.data.zero_()
         x_hat_adv = vae_model.re_forward(x_)
- 
-    logit_adv = c_model(x_.view(-1,120,7,7))
+    logit_adv = c_model(x_.view(-1,channel,7,7))
     return logit_adv
 
-def testtime_update_cifar_opt(vae_model, c_model, x_adv, target, learning_rate=0.1, num = 30, mode = 'mean', channel=128, opti = 'adam'):
+def testtime_update_mnist_new_opt(vae_model, c_model, x_adv, target, learning_rate=0.1, num = 30, mode = 'mean', channel=120, opti = 'adam', nc = 0):
     x_adv = x_adv.detach()
     x_hat_adv, _, _, x_ = vae_model(x_adv)
+    for _ in range(nc):
+        x_hat_adv, _, _, x_ = vae_model(x_hat_adv)
+    x_copy = x_.detach().clone()
+    if opti == 'adam':
+        opt = optim.Adam([x_copy], lr=learning_rate)
+    elif opti == 'sgd':
+        opt = optim.SGD([x_copy], lr=learning_rate, momentum=0.9)
+    for _ in range(num):
+        if (x_hat_adv != x_hat_adv).sum() > 0:
+            print('nan Error')
+            exit()
+        if mode == 'mean':
+            loss = nn.functional.binary_cross_entropy(x_hat_adv, x_adv, size_average=False, reduction='mean')
+        else:
+            loss = nn.functional.binary_cross_entropy(x_hat_adv, x_adv, reduction='sum')
+        x_.retain_grad()
+        loss.backward(retain_graph=True)
+        grad = torch.autograd.grad(loss, x_)
+        with torch.no_grad():
+            # x_.data -= learning_rate * x_.grad.data
+            x_copy.grad = grad[0]
+        x_.grad.data.zero_()
+        opt.step()
+        x_ = x_copy.detach().clone()
+        x_.requires_grad = True
+        x_hat_adv = vae_model.re_forward(x_)
+    logit_adv = c_model(x_.view(-1,channel,7,7))
+    return logit_adv
+
+def testtime_update_cifar_opt(vae_model, c_model, x_adv, target, learning_rate=0.1, num = 30, mode = 'mean', channel=128, opti = 'adam', nc=1):
+    x_adv = x_adv.detach()
+    x_hat_adv, _, _, x_ = vae_model(x_adv)
+    for _ in range(nc):
+        x_hat_adv, _, _, x_ = vae_model(x_hat_adv)
     x_copy = x_.detach().clone()
     if opti == 'adam':
         opt = optim.Adam([x_copy], lr=learning_rate)
@@ -137,75 +166,19 @@ def testtime_update_cifar(vae_model, c_model, x_adv, target, learning_rate=0.1, 
 
 
 
-def diff_update_cifar(vae_model, c_model, x_adv, target, learning_rate=0.1, num = 30, mode = 'mean'):
-    x_adv = x_adv.detach()
-    x_hat_adv, _, _, x_ = vae_model(x_adv)
-    logit_nat = c_model(x_.view(-1,160,8,8))
-    if (x_hat_adv != x_hat_adv).sum() > 0:
-        print('PGD nan Error')
-        exit()
-    for _ in range(num):
-        if (x_hat_adv != x_hat_adv).sum() > 0:
-            print('nan Error')
-            exit()
-        if mode == 'mean':
-            loss = nn.functional.binary_cross_entropy(x_hat_adv, x_adv, size_average=False, reduction='mean')
-            # loss = vae_loss_mean(x_adv, x_hat_adv, mean, log_v)
-        else:
-            loss = nn.functional.binary_cross_entropy(x_hat_adv, x_adv, reduction='sum')
-            # loss = vae_loss_sum(x_adv, x_hat_adv, mean, log_v)
-        x_.retain_grad()
-        loss.backward(retain_graph=True)
-        with torch.no_grad():
-            x_.data -= learning_rate * x_.grad.data
-        x_.grad.data.zero_()
-        # x_hat_adv = vae_model.re_forward(x_)
-    _, _, _, x_ = vae_model(x_hat_adv)
-    logit_final = c_model(x_.view(-1,160,8,8))
-    logit_diff = logit_final - logit_nat
-        # print((logit_diff.data.max(1)[1] != target.data).float().sum())
-    return logit_diff
-
-def diff_update_mnist(vae_model, c_model, x_adv, target, learning_rate=0.1, num = 30, mode = 'mean'):
-    x_adv = x_adv.detach()
-    x_hat_adv, _, _, x_ = vae_model(x_adv)
-    logit_nat = c_model(x_.view(-1,120,7,7))
-    if (x_hat_adv != x_hat_adv).sum() > 0:
-        print('PGD nan Error')
-        exit()
-    for _ in range(num):
-        if (x_hat_adv != x_hat_adv).sum() > 0:
-            print('nan Error')
-            exit()
-        if mode == 'mean':
-            loss = nn.functional.binary_cross_entropy(x_hat_adv, x_adv, size_average=False, reduction='mean')
-            # loss = vae_loss_mean(x_adv, x_hat_adv, mean, log_v)
-        else:
-            loss = nn.functional.binary_cross_entropy(x_hat_adv, x_adv, reduction='sum')
-            # loss = vae_loss_sum(x_adv, x_hat_adv, mean, log_v)
-        x_.retain_grad()
-        loss.backward(retain_graph=True)
-        with torch.no_grad():
-            x_.data -= learning_rate * x_.grad.data
-        x_.grad.data.zero_()
-        x_hat_adv = vae_model.re_forward(x_)
-    _, _, _, x_ = vae_model(x_hat_adv)
-    logit_final = c_model(x_.view(-1,120,7,7))
-    logit_diff = logit_final - logit_nat
-        # print((logit_diff.data.max(1)[1] != target.data).float().sum())
-    return logit_diff
-
-
 def logit_calculate(logit_old, logit_new):
     label_old = logit_old.data.max(1)[1]
+    label_new = logit_new.data.max(1)[1]
     logit_diff = logit_new - logit_old
     label_diff = logit_diff.data.max(1)[1]
-    label_new = []
-    for i in range(label_old.size(0)):
-        if logit_diff[i][label_old[i]].item() / abs(logit_old[i][label_old[i]].item()) >= -0.1:
-        # if logit_diff[i][label_old[i]] >= 0:
-            label_new.append(label_old[i].item())
-        else:
-            label_new.append(label_diff[i].item())
-    return torch.Tensor(label_new)
+    label_update = []
     # return label_diff
+    for i in range(label_old.size(0)):
+        # if logit_diff[i][label_old[i]].item() / abs(logit_old[i][label_old[i]].item()) >= -0.1:
+        # if logit_diff[i][label_old[i]] < -2.0:
+        if logit_diff[i][label_old[i]] < -2.0 and logit_diff.data.max(1)[0][i]/torch.abs(logit_diff[i][label_old[i]]) > 0.8:
+            label_update.append(label_diff[i].item())
+        else:
+            label_update.append(label_new[i].item())
+    return torch.Tensor(label_update)
+    
