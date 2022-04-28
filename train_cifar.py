@@ -3,7 +3,6 @@ import torchvision
 import torch.nn as nn
 from torch.autograd import Variable
 from torchvision import datasets, transforms
-from blackbox_pgd_model.wideresnet_update import *
 from model.wideVAE import *
 from pgd_attack import *
 import torch.optim as optim
@@ -29,6 +28,8 @@ args = parser.parse_args()
 
 if not os.path.exists(args.model_dir):
     os.makedirs(args.model_dir)
+if not os.path.exists("./output-log"):
+    os.makedirs("./output-log")
 torch.manual_seed(1)
 torch.cuda.manual_seed(1)
 torch.backends.cudnn.benchmark = False
@@ -109,7 +110,7 @@ def eval_test(vae_model, c_model, channel):
             err_num += (logit.data.max(1)[1] != target.data).float().sum()
     print('test error num:{}'.format(err_num))
 
-def test(vae_model, c_model, source_model, channel=128):
+def test(vae_model, c_model, channel=128, lr=0.01, num=10):
     err_num = 0
     err_adv = 0
     err_nat = 0
@@ -122,24 +123,7 @@ def test(vae_model, c_model, source_model, channel=128):
         _,_,_,x_ = vae_model(data)
         logit = c_model(x_.view(-1,channel,8,8))
         err_nat += (logit.data.max(1)[1] != target.data).float().sum()
-        if t:
-            for i in range(100,150):
-                print('num of step',i)
-                logit_new = testtime_update_cifar_opt(vae_model, c_model, data, target,learning_rate=0.001, num=i, channel=channel, opti='adam',nc=0)
-                # logit_new = testtime_update_cifar(vae_model, c_model, data, target,learning_rate=0.1, num=30, channel=channel)
-                label = logit_calculate(logit, logit_new).to(device)
-                print((label.data != target.data).float().sum())
-                x_adv = pgd_cifar(vae_model, c_model, data, target, 20, 0.03, 0.003, channel=channel)
-                # x_adv = pgd_cifar_blackbox(vae_model, c_model, source_model, data, target, 20, 0.03, 0.003)
-                _,_,_,x_ = vae_model(x_adv)
-                logit_adv = c_model(x_.view(-1,channel,8,8))
-                logit_adv_new = testtime_update_cifar_opt(vae_model, c_model, x_adv, target,learning_rate=0.001, num=i, channel=channel, opti='adam', nc=0)
-                # logit_adv_new = testtime_update_cifar(vae_model, c_model, x_adv, target,learning_rate=0.1, num=30, channel=channel)
-                label_adv = logit_calculate(logit_adv, logit_adv_new).to(device)
-                print((label_adv.data != target.data).float().sum())
-                print("======")
-            exit()
-        logit_new = testtime_update_cifar_opt(vae_model, c_model, data, target,learning_rate=0.01, num=10, channel=channel, opti='adam', nc=0)
+        logit_new = testtime_update_cifar_opt(vae_model, c_model, data, target,learning_rate=lr, num=num, channel=channel, opti='adam', nc=0)
         # logit_new = testtime_update_cifar(vae_model, c_model, data, target,learning_rate=0.1, num=100, channel=channel)
         label = logit_calculate(logit, logit_new).to(device)
         err_num += (label.data != target.data).float().sum()
@@ -147,7 +131,7 @@ def test(vae_model, c_model, source_model, channel=128):
         # x_adv = pgd_cifar_blackbox(vae_model, c_model, source_model, data, target, 20, 0.03, 0.003)
         _,_,_,x_ = vae_model(x_adv)
         logit_adv = c_model(x_.view(-1,channel,8,8))
-        logit_adv_new = testtime_update_cifar_opt(vae_model, c_model, x_adv, target,learning_rate=0.01, num=10, channel=channel, opti='adam', nc=0)
+        logit_adv_new = testtime_update_cifar_opt(vae_model, c_model, x_adv, target,learning_rate=lr, num=num, channel=channel, opti='adam', nc=0)
         # logit_adv_new = testtime_update_cifar(vae_model, c_model, x_adv, target,learning_rate=0.1, num=100, channel=channel)
         label_adv = logit_calculate(logit_adv, logit_adv_new).to(device)
         # label_adv = logit_adv_new.max(1)[1]
@@ -194,15 +178,12 @@ def main():
                 torch.save(vae_model.state_dict(), os.path.join(args.model_dir, 'cifar-vae-model-{}.pt'.format(epoch)))
                 torch.save(c_model.state_dict(), os.path.join(args.model_dir, 'cifar-c-model-{}.pt'.format(epoch)))
     else:
-        source_model = WideResNet().to(device)
-        source_model_path = './blackbox_pgd_model/model-wideres-epoch76.pt'
         print('testing mode')
-        # source_model.load_state_dict(torch.load(source_model_path))
         vae_model_path = '{}/cifar-vae-model-{}.pt'.format(args.model_dir, args.test_num)
         c_model_path = '{}/cifar-c-model-{}.pt'.format(args.model_dir, args.test_num)
         vae_model.load_state_dict(torch.load(vae_model_path))
         c_model.load_state_dict(torch.load(c_model_path))
-        test(vae_model, c_model,source_model, channel=channel[2])
+        test(vae_model, c_model, channel=channel[2], lr=0.01, num=10)
     
 
 if __name__ == '__main__':

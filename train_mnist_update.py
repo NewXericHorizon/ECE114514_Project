@@ -28,6 +28,8 @@ args = parser.parse_args()
 
 if not os.path.exists(args.model_dir):
     os.makedirs(args.model_dir)
+if not os.path.exists("./output-log"):
+    os.makedirs("./output-log")
 torch.manual_seed(1)
 torch.cuda.manual_seed(1)
 torch.backends.cudnn.benchmark = False
@@ -100,7 +102,7 @@ def eval_test(vae_model, c_model, channel):
             err_num += (logit.data.max(1)[1] != target.data).float().sum()
     print('test error num:{}'.format(err_num))
 
-def test(vae_model, c_model, channel):
+def test(vae_model, c_model, channel, lr=0.01, num=100):
     err_num = 0
     err_adv = 0
     err_nat = 0
@@ -113,7 +115,7 @@ def test(vae_model, c_model, channel):
         logit = c_model(x_.view(-1,channel,7,7))
         err_nat += (logit.data.max(1)[1]!=target.data).float().sum()
         # logit_new = testtime_update_mnist_new(vae_model, c_model, data, target,learning_rate=0.05, num=40, mode = 'sum', channel=channel)
-        logit_new = testtime_update_mnist_new_opt(vae_model, c_model, data, target,learning_rate=0.1, num=3, channel=channel,opti='adam', nc=0)
+        logit_new = testtime_update_mnist_new_opt(vae_model, c_model, data, target,learning_rate=lr, num=num, channel=channel,opti='adam', nc=0)
         # label = logit_new.max(1)[1]
         label = logit_calculate(logit, logit_new).to(device)
         err_num += (label.data != target.data).float().sum()
@@ -122,7 +124,7 @@ def test(vae_model, c_model, channel):
         _,_,_,x_ = vae_model(x_adv)
         logit_adv = c_model(x_.view(-1,channel,7,7))
         # logit_adv_new = testtime_update_mnist_new(vae_model, c_model, x_adv, target,learning_rate=0.05, num=40, mode = 'sum', channel=channel)
-        logit_adv_new = testtime_update_mnist_new_opt(vae_model, c_model, x_adv, target,learning_rate=0.1, num=3, channel=channel,opti='adam', nc=0)
+        logit_adv_new = testtime_update_mnist_new_opt(vae_model, c_model, x_adv, target,learning_rate=lr, num=num, channel=channel,opti='adam', nc=0)
         # label_adv = logit_adv_new.max(1)[1]
         label_adv = logit_calculate(logit_adv, logit_adv_new).to(device)
         err_adv += (label_adv.data != target.data).float().sum()
@@ -172,7 +174,7 @@ def main():
         c_model_path = '{}/mnist-new-c-model-{}.pt'.format(args.model_dir, args.test_num)
         vae_model.load_state_dict(torch.load(vae_model_path))
         c_model.load_state_dict(torch.load(c_model_path))
-        test(vae_model, c_model, channel[2])
+        test(vae_model, c_model, channel[2], lr=0.01, num=100)
     
 
 if __name__ == '__main__':
