@@ -1,6 +1,6 @@
 # ECE740 Project
 
-*Hao Xuan*, *Yinsheng He*, *Chen Kong*\
+*Hao Xuan*, *Yinsheng He*, *Chen Kong*
 
 In this project, we propose a new model aims for robustness.
 It consists of a VAE and a classifier that work together to produce
@@ -11,7 +11,7 @@ To train model on CIFAR-10 dataset, please run
 ```
 python train_cifar.py
 ```
-It will save last few checkpoints in './model-checkpoint' folder.
+It will save last few checkpoints in `./model-checkpoint` folder.
 
 To test model on CIFAR-10 dataset, please run
 ```
