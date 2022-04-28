@@ -1,4 +1,4 @@
-        ECE740 Project
+ECE740 Project
 Hao Xuan, Yinsheng He, Chen Kong
 
 In this project, we propose a new model aims for robustness.
