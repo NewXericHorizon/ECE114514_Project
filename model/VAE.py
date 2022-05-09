@@ -81,20 +81,21 @@ class VAE(nn.Module):
         out = self.decoder(z)
         return out
 
+    def extract_layer_en(self):
+        layer = [self.encConv1, self.encConv2, self.max1, self.encConv3, self.encConv4, self.max2]
+        return nn.Sequential(*layer)
+    def extract_layer_de(self):
+        layer = [self.encFC1, self.encFC2, self.decFC1, self.decTrans1, self.decConv1, self.decTrans2, self.decConv2]
+        return nn.Sequential(*layer)
 
 class classifier(nn.Module):
     def __init__(self, input_dim = 64*2, feature_dim = 10):
         super(classifier, self).__init__()
-        # self.encConv1 = nn.Conv2d(1, 32, 3, padding=1)
-        # self.encConv2 = nn.Conv2d(32, 32, 3, padding=1)
-        # self.max1 = nn.MaxPool2d(2,2)
-        # self.encConv3 = nn.Conv2d(32, 64, 3, padding=1)
-        # self.encConv4 = nn.Conv2d(64, 64, 3, padding=1)
-        # self.max2 = nn.MaxPool2d(2,2)
+
 
         self.FC1 = nn.Linear(input_dim, 512)
         self.drop = nn.Dropout(0.5)
-        self.FC2 = nn.Linear(512,512)
+        # self.FC2 = nn.Linear(512,512)
         self.FC3 = nn.Linear(512,256)
         self.FC4 = nn.Linear(256, feature_dim)
         for m in self.modules():
@@ -117,7 +118,7 @@ class classifier(nn.Module):
 
         x = F.relu(self.FC1(x))
         x = self.drop(x)
-        x = F.relu(self.FC2(x))
+        # x = F.relu(self.FC2(x))
         x = F.relu(self.FC3(x))
         x = self.FC4(x)
         return x

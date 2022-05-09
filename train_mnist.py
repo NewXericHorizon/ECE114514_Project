@@ -1,4 +1,5 @@
 from cmath import log
+from re import I
 import torch
 import torchvision
 import torch.nn as nn
@@ -19,7 +20,7 @@ parser.add_argument('--test-batch-size', type=int, default=400, metavar='N',
 parser.add_argument('--x-dim', type=int, default=784)
 parser.add_argument('--hidden-dim', type=int, default=400)
 parser.add_argument('--latent-dim', type=int, default=256)
-parser.add_argument('--epochs', type=int, default=55)
+parser.add_argument('--epochs', type=int, default=60)
 parser.add_argument('--testtime-epochs', type=int, default=20)
 parser.add_argument('--testtime-lr',  default=0.1)
 parser.add_argument('--lr', default=0.001)
@@ -62,7 +63,7 @@ def train(vae_model, c_model, data_loader, vae_optimizer, c_optimizer, epoch_num
         v_loss_sum += v_loss
         c_loss_sum += c_loss
         
-        if epoch_num <= 20:
+        if epoch_num <= 25:
             v_loss.backward()
             vae_optimizer.step()
             c_loss.backward()
@@ -137,9 +138,11 @@ def adjust_learning_rate(vae_optimizer,c_optimizer, epoch):
 
 def main():
     vae_model = VAE().to(device)
-    vae_optimizer = optim.Adam(vae_model.parameters(), lr=args.lr)
+    para = list(vae_model.extract_layer_en().parameters()) + list(vae_model.extract_layer_de().parameters())
+    vae_optimizer = optim.Adam(para, lr=args.lr)
     c_model = classifier().to(device)
     c_optimizer = optim.Adam(c_model.parameters(), lr=args.lr)
+    
     if args.test_num == 0:
         print(len(train_loader.dataset))
         for epoch in range(1, args.epochs+1):
@@ -148,7 +151,7 @@ def main():
             print('Epoch {}: classifier Average loss: {:.6f}'.format(epoch, c_loss/len(train_loader.dataset)))
             eval_train(vae_model, c_model)
             eval_test(vae_model, c_model)
-            if epoch > 50:
+            if epoch > 55:
                 torch.save(vae_model.state_dict(), os.path.join(args.model_dir, 'mnist-vae-model-{}.pt'.format(epoch)))
                 torch.save(c_model.state_dict(), os.path.join(args.model_dir, 'mnist-c-model-{}.pt'.format(epoch)))
         

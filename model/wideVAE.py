@@ -37,15 +37,15 @@ class wide_VAE(nn.Module):
         featureDim = channel[2]*8*8
         self.featureDim = featureDim
         self.in_layer = nn.Conv2d(3, channel[0], kernel_size=3, stride=1, padding=1, bias=False)
-        self.enc_block1 = self._make_layer_encoder(2, in_planes=channel[0], out_planes=channel[1], stride=2)
-        self.enc_block2 = self._make_layer_encoder(2, in_planes=channel[1], out_planes=channel[2], stride=2)
+        self.enc_block1 = self._make_layer_encoder(3, in_planes=channel[0], out_planes=channel[1], stride=2)
+        self.enc_block2 = self._make_layer_encoder(3, in_planes=channel[1], out_planes=channel[2], stride=2)
         self.norm = nn.BatchNorm2d(channel[2])
         self.encFC1 = nn.Linear(featureDim, zDim)
         self.encFC2 = nn.Linear(featureDim, zDim)
 
         self.decFC1 = nn.Linear(zDim, featureDim)
-        self.dec_block1 = self._make_layer_decoder(2, in_planes=channel[2], out_planes=channel[1] ,stride=2)
-        self.dec_block2 = self._make_layer_decoder(2, in_planes=channel[1], out_planes=channel[0], stride=2)
+        self.dec_block1 = self._make_layer_decoder(3, in_planes=channel[2], out_planes=channel[1] ,stride=2)
+        self.dec_block2 = self._make_layer_decoder(3, in_planes=channel[1], out_planes=channel[0], stride=2)
         self.out_layer = nn.Conv2d(channel[0], 3, kernel_size=3, stride=1, padding=1, bias=False)
 
         for m in self.modules():
@@ -118,6 +118,14 @@ class wide_VAE(nn.Module):
         z = self.reparameterize(mu, logVar)
         out = self.decoder(z)
         return out
+
+    def extract_layer_en(self):
+        layer = [self.in_layer, self.enc_block1, self.enc_block2]
+        return nn.Sequential(*layer)
+
+    def extract_layer_de(self):
+        layer = [self.encFC1, self.encFC2, self.decFC1, self.dec_block1, self.dec_block2, self.out_layer]
+        return nn.Sequential(*layer)  
 
 class classifier(nn.Module):
     def __init__(self, input_dim = 128, feature_dim=10):
