@@ -68,12 +68,14 @@ def train(vae_model, c_model, data_loader, vae_optimizer, c_optimizer, epoch_num
         v_loss_sum += v_loss
         c_loss_sum += c_loss
         # if epoch_num % 2 == 1:
-    
-        v_loss.backward()
-        vae_optimizer.step()
-        c_loss.backward()
-        c_optimizer.step()
-
+        if epoch_num <= 30:
+            v_loss.backward()
+            vae_optimizer.step()
+            c_loss.backward()
+        else:
+            c_loss.backward()
+            c_optimizer.step()
+            v_loss.backward()
     return v_loss_sum, c_loss_sum, r_loss_sum, kld_loss_sum
 
 def eval_train(vae_model, c_model, channel):
@@ -145,8 +147,8 @@ def adjust_learning_rate(optimizer, epoch, lr):
         param_group['lr'] = lr_
 
 def main():
-    channel = [16,32,64]
-    vae_model = VAE(zDim = 4, channel=channel).to(device)
+    channel = [16,60,120]
+    vae_model = VAE(zDim = 32, channel=channel).to(device)
     vae_optimizer = optim.Adam(vae_model.parameters(), lr=args.lr)
     c_model = classifier(input_dim=channel[2]).to(device)
     c_optimizer = optim.Adam(c_model.parameters(), lr=args.lr)
