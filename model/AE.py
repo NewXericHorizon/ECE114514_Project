@@ -21,35 +21,37 @@ class BasicBlock(nn.Module):
     def forward(self, x):
         if not self.equalInOut:
             x = self.relu1(self.bn1(x))
+            # x = self.relu1(x)
         else:
             out = self.relu1(self.bn1(x))
+            # out = self.relu1(x)
         out = self.relu2(self.bn2(self.conv1(out if self.equalInOut else x)))
+        # out = self.relu2(self.conv1(out if self.equalInOut else x))
         if self.droprate > 0:
             out = F.dropout(out, p=self.droprate, training=self.training)
         out = self.conv2(out)
         return torch.add(x if self.equalInOut else self.convShortcut(x), out)
 
 
-class VAE(nn.Module):
-    def __init__(self, featureDim = 120*7*7, zDim = 256, dropRate = 0.0, channel = [16,60,120]):
-        super(VAE, self).__init__()
+class wide_VAE(nn.Module):
+    def __init__(self, zDim = 512, dropRate = 0.0, channel = [16,64,128]):
+        super(wide_VAE, self).__init__()
         self.channel = channel
-        featureDim = 7*7*channel[2]
+        featureDim = channel[2]*8*8
         self.featureDim = featureDim
-        self.in_layer = nn.Conv2d(1, channel[0], kernel_size=3, stride=1, padding=1, bias=False)
-        self.enc_block1 = self._make_layer_encoder(1, in_planes=channel[0], out_planes=channel[1], stride=2)
-        self.enc_block2 = self._make_layer_encoder(1, in_planes=channel[1], out_planes=channel[2], stride=2)
+        self.in_layer = nn.Conv2d(3, channel[0], kernel_size=3, stride=1, padding=1, bias=False)
+        self.enc_block1 = self._make_layer_encoder(3, in_planes=channel[0], out_planes=channel[1], stride=2)
+        self.enc_block2 = self._make_layer_encoder(3, in_planes=channel[1], out_planes=channel[2], stride=2)
         self.norm = nn.BatchNorm2d(channel[2])
         self.encFC1 = nn.Linear(featureDim, zDim)
         self.encFC2 = nn.Linear(featureDim, zDim)
 
         self.decFC1 = nn.Linear(zDim, featureDim)
-        self.dec_block1 = self._make_layer_decoder(1, in_planes=channel[2], out_planes=channel[1] ,stride=2)
-        self.dec_block2 = self._make_layer_decoder(1, in_planes=channel[1], out_planes=channel[0], stride=2)
-        self.out_layer = nn.Conv2d(channel[0], 1, kernel_size=3, stride=1, padding=1, bias=False)
-
+        self.dec_block1 = self._make_layer_decoder(3, in_planes=channel[2], out_planes=channel[1] ,stride=2)
+        self.dec_block2 = self._make_layer_decoder(3, in_planes=channel[1], out_planes=channel[0], stride=2)
+        self.out_layer = nn.Conv2d(channel[0], 3, kernel_size=3, stride=1, padding=1, bias=False)
         for m in self.modules():
-            if isinstance(m, (nn.Conv2d)):
+            if isinstance(m, (nn.Conv2d)) or isinstance(m, nn.ConvTranspose2d):
                 nn.init.xavier_uniform_(m.weight.data)
             elif isinstance(m, nn.BatchNorm2d):
                 nn.init.constant_(m.weight.data, 1)
@@ -57,7 +59,6 @@ class VAE(nn.Module):
             elif isinstance(m, nn.Linear):
                 nn.init.normal_(m.weight.data,0.0, 0.02)
                 nn.init.zeros_(m.bias.data)
-
     def _make_layer_encoder(self, depth, in_planes, out_planes, stride, dropRate = 0.0):
         layers = []
         for i in range(depth):
@@ -85,10 +86,12 @@ class VAE(nn.Module):
         x = self.enc_block1(x)
         x = self.enc_block2(x)
         x = F.relu(self.norm(x))
+        # x = F.relu(x)
         x = x.view(-1, self.featureDim)
-        mu = self.encFC1(x)
-        logVar = self.encFC2(x)
-        return mu, logVar, x
+        # x = x.view(-1, 128*8*8)
+        z = self.encFC1(x)
+        # logVar = self.encFC2(x)
+        return z, x
 
     def reparameterize(self, mu, logVar):
         #Reparameterization takes in the input mu and logVar and sample the mu + std * eps
@@ -98,36 +101,34 @@ class VAE(nn.Module):
 
     def decoder(self, z):
         z = F.relu(self.decFC1(z))
-        z = z.view(-1, self.channel[2], 7, 7)
+        z = z.view(-1, self.channel[2], 8, 8)
         z = self.dec_block1(z)
         z = self.dec_block2(z)
         z = torch.sigmoid(self.out_layer(z))
         return z
 
     def forward(self, x):
-        mu, logVar, x_ = self.encoder(x)
-        z = self.reparameterize(mu, logVar)
+        z, x_ = self.encoder(x)
+        # z = self.reparameterize(mu, logVar)
         out = self.decoder(z)
-        return out, mu, logVar, x_
+        return out, x_.view(-1,self.channel[2],8,8)
 
     def re_forward(self, x):
-        # x = x.view(-1, self.featureDim)
-        mu = self.encFC1(x)
-        logVar = self.encFC2(x)
-        z = self.reparameterize(mu, logVar)
+        x = x.view(-1, self.featureDim)
+        z = self.encFC1(x)
         out = self.decoder(z)
         return out
 
 class classifier(nn.Module):
-    def __init__(self, input_dim = 120, feature_dim=10):
+    def __init__(self, input_dim = 128, feature_dim=10):
         super(classifier, self).__init__()
-        self.out_dim = input_dim*2
+        self.out_dim = input_dim*4
         self.in_layer = nn.Conv2d(input_dim, input_dim, kernel_size=3, stride=1, padding=1, bias=False)
-        self.block1 = self._make_layer(2, input_dim, int(input_dim*2), 2)
-        # self.block2 = self._make_layer(1, int(input_dim*2), self.out_dim, 2)
+        self.block1 = self._make_layer(3, input_dim, int(input_dim*2), 1)
+        self.block2 = self._make_layer(3, int(input_dim*2), self.out_dim,2)
         self.bn = nn.BatchNorm2d(self.out_dim)
         self.relu = nn.ReLU(inplace=True)
-        self.FC = nn.Linear(self.out_dim, 10)
+        self.FC = nn.Linear(self.out_dim, feature_dim)
 
         for m in self.modules():
             if isinstance(m, (nn.Conv2d)):
@@ -147,7 +148,7 @@ class classifier(nn.Module):
     def forward(self, x):
         x = self.in_layer(x)
         x = self.block1(x)
-        # x = self.block2(x)
+        x = self.block2(x)
         x = self.relu(self.bn(x))
         x = F.avg_pool2d(x, 4)
         x = x.view(-1, self.out_dim)
