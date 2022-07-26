@@ -6,14 +6,48 @@ from torchvision import datasets, transforms
 import torch.optim as optim
 
 
-def pgd_cifar(vae_model, c_model, X, label, num_steps, epsilon, step_size, channel=128):
+def pgd_cifar_resnet(vae_model, c_model, X, label, num_steps, epsilon, step_size):
     X_pgd = Variable(X.data, requires_grad=True)
     for _ in range(num_steps):
         opt = optim.SGD([X_pgd], lr=1e-3)
         opt.zero_grad()
         with torch.enable_grad():
-            _, _, _, x_ = vae_model(X_pgd)
-            logit = c_model(x_.view(-1,channel,8,8))
+            _, _, _, z = vae_model(X_pgd)
+            logit = c_model(z)
+            loss = nn.CrossEntropyLoss()(logit, label)
+        loss.backward()
+        eta = step_size * X_pgd.grad.data.sign()
+        X_pgd = Variable(X_pgd.data + eta, requires_grad=True)
+        eta = torch.clamp(X_pgd.data - X.data, -epsilon, epsilon)
+        X_pgd = Variable(X.data + eta, requires_grad=True)
+        X_pgd = Variable(torch.clamp(X_pgd, 0, 1.0), requires_grad=True)
+    return X_pgd
+
+def pgd_cifar_AE(vae_model, c_model, X, label, num_steps, epsilon, step_size):
+    X_pgd = Variable(X.data, requires_grad=True)
+    for _ in range(num_steps):
+        opt = optim.SGD([X_pgd], lr=1e-3)
+        opt.zero_grad()
+        with torch.enable_grad():
+            _, z = vae_model(X_pgd)
+            logit = c_model(z)
+            loss = nn.CrossEntropyLoss()(logit, label)
+        loss.backward()
+        eta = step_size * X_pgd.grad.data.sign()
+        X_pgd = Variable(X_pgd.data + eta, requires_grad=True)
+        eta = torch.clamp(X_pgd.data - X.data, -epsilon, epsilon)
+        X_pgd = Variable(X.data + eta, requires_grad=True)
+        X_pgd = Variable(torch.clamp(X_pgd, 0, 1.0), requires_grad=True)
+    return X_pgd
+
+def pgd_cifar(vae_model, c_model, X, label, num_steps, epsilon, step_size, channel):
+    X_pgd = Variable(X.data, requires_grad=True)
+    for _ in range(num_steps):
+        opt = optim.SGD([X_pgd], lr=1e-3)
+        opt.zero_grad()
+        with torch.enable_grad():
+            _, _, _, z = vae_model(X_pgd)
+            logit = c_model(z.view(-1,channel,8,8))
             loss = nn.CrossEntropyLoss()(logit, label)
         loss.backward()
         eta = step_size * X_pgd.grad.data.sign()
